@@ -1,0 +1,306 @@
+/********************************************赛道提取*********************************************/
+
+		float height_last = 1000;
+		float differ_height = 0;
+
+		float calib_point[3][3];
+		float theta_x;
+		float theta_y;
+
+		//float real_coord_x;
+		//float real_coord_y;
+		//float real_coord_z;
+
+		float cir_coord_x_min = 160;
+		float cir_coord_y_min = 160;
+		float cir_coord_x_max = -160;
+		float cir_coord_y_max = -160;
+
+		float cir_center_coord_x = 0;
+		float cir_center_coord_y = 0;
+
+		float cir_coord_x_rmin = 0;
+		float cir_coord_y_rmin = 0;
+		float cir_coord_x_rmax = 0;
+		float cir_coord_y_rmax = 0;
+		float cir_coord_x_rmin_e = 0;
+		float cir_coord_y_rmin_e = 0;
+		float cir_coord_x_rmax_e = 0;
+		float cir_coord_y_rmax_e = 0;
+
+		float cir_r_square_min = 20000;
+		float cir_r_square_max = 0;
+		float cir_r_square = 0;
+		float cir_r_min_e = 0;
+		float cir_r_max_e = 0;
+		float cir_r_min = 0;
+		float cir_r_max = 0;
+
+		int cir_x_last = 0;
+		int cir_y_last = 0;
+
+		float ground_depth = 0;
+		float plat_depth = 0;
+		float thick_plat = 0;
+
+		float cir_point[3][1000] = { 0 };
+		float res_min = 0.1;
+		int k = 0;
+
+		//遍历所需准备
+		int height = depth1.rows, width = depth1.cols;
+		ushort* far_dpixels = depth1.ptr<ushort>(0);
+
+	
+		float a = 1000 * dev->get_depth_scale();
+
+		for (int y = 0; y < height; ++y)
+			for (int x = 0; x < width; ++x)
+			{
+				//区域滤除
+				int predepth = *far_dpixels;
+				float depth = predepth*a;
+
+				//角度标定
+				/*得到划定区域内三个顶点的三维坐标*/
+				if ((x == ROI_D_X1) && (y == ROI_D_Y2))
+				{
+					calib_point[0][2] = depth;
+					calib_point[0][0] = calib_point[0][2] * (ROI_D_X1 - 320.0f) * 0.002108f;
+					calib_point[0][1] = calib_point[0][2] * (240.0f - ROI_D_Y2) * 0.002123f;
+				}
+
+				if ((x == ROI_D_X1) && (y == ROI_D_Y1))
+				{
+					calib_point[1][2] = depth;
+					calib_point[1][0] = calib_point[1][2] * (ROI_D_X1 - 320.0f) * 0.002108f;
+					calib_point[1][1] = calib_point[1][2] * (240.0f - ROI_D_Y1) * 0.002123f;
+				}
+				
+				if ((x == ROI_D_X2) && (y == ROI_D_Y2))
+				{
+					calib_point[2][2] = depth;
+					calib_point[2][0] = calib_point[2][2] * (ROI_D_X2 - 320.0f) * 0.002108f;
+					calib_point[2][1] = calib_point[2][2] * (240.0f - ROI_D_Y2) * 0.002123f;
+				}
+
+				theta_x = atan((calib_point[2][2] - calib_point[0][2]) / (calib_point[2][0] - calib_point[0][0]));
+				theta_y = atan((calib_point[1][2] - calib_point[0][2]) / (calib_point[1][1] - calib_point[0][1]));
+			}
+
+		////遍历所需准备
+	 //height = depth1.rows, width = depth1.cols;
+	 //far_dpixels = depth1.ptr<ushort>(0);
+
+	
+		
+
+		//遍历找到有效狭缝
+		for (int y = 0; y < height; y++)
+			for (int x = 0; x < width; x++)
+			{
+				//区域滤除
+				int predepth = *far_dpixels;
+				float depth = predepth*a;
+
+				//最外区域滤除
+				if ((x > ROI_D_X1) && (x<ROI_D_X2) && (y>ROI_D_Y1) && (y<ROI_D_Y2))
+				{
+					//第一次计算坐标
+					float coord_x = depth * (x - 320.0f) * 0.002108f;//68//tan34/320
+					float coord_y = depth * (240.0f - y) * 0.002123f;//54
+					float coord_z = depth ;
+
+					//第二次标定计算
+					float real_coord_x = coord_x / cos(theta_x);
+					float real_coord_y = coord_y / cos(theta_y);
+					float real_coord_z = coord_z * cos(theta_x) * cos(theta_y);
+
+					//x_out = real_coord_x;
+					//y_out = real_coord_y;
+					//z_out = real_coord_z;
+
+					//计算飞盘所处平面的深度值
+					ground_depth = (calib_point[0][2] + calib_point[1][2] + calib_point[2][2]) / 3 * cos(theta_x) * cos(theta_y);
+
+                    //找到非计算的余量
+
+
+					//深度信息初始化
+					if ((x == 0) && (y == 0))
+						height_last = real_coord_z;
+					else
+						if ((real_coord_z < 10) || (real_coord_z > 5000))
+					    {
+							real_coord_z = height_last;
+					    }
+
+					differ_height = abs(real_coord_z - height_last);
+					height_last = real_coord_z;
+
+					//cout << "x=" << x << " " << "y=" << y << " " << "z=" << real_coord_z << " " << "differ=" << differ_height << endl;
+					
+					//根据深度差判断飞盘边缘
+					////////////////判断条件待改////////////////////////////////////////
+					if ((differ_height > 4) && (real_coord_z < 366 || height_last < 366))//366
+					{
+						//cout << "x=" << x << " " << "y=" << y << "  " << "z=" << real_coord_z << " " << "differ=" << differ_height << endl;
+						
+						//存储飞盘边缘坐标值
+						cir_point[0][k] = real_coord_x;
+						cir_point[1][k] = real_coord_y;
+						cir_point[2][k] = real_coord_z;
+						
+						//飞盘边缘坐标值的极值
+						if (cir_point[0][k] < cir_coord_x_min)
+							cir_coord_x_min = cir_point[0][k];
+						if (cir_point[0][k] > cir_coord_x_max)
+							cir_coord_x_max = cir_point[0][k];
+
+						if (cir_point[1][k] < cir_coord_y_min)
+							cir_coord_y_min = cir_point[1][k];
+						if (cir_point[1][k] > cir_coord_y_max)
+							cir_coord_y_max = cir_point[1][k];
+
+						//避免图像画出多余的线
+						if ((cir_x_last > (ROI_D_X1+1)) && (cir_x_last < (ROI_D_X2-1)) && (cir_y_last > (ROI_D_Y1+1)) && (cir_y_last < (ROI_D_Y2-1)))
+						{
+							line(depth1, Point(cir_x_last, cir_y_last), Point(x, y), Scalar(255 * 256, 0, 0), 2, 1);
+							
+							//pointInterest.x = x;
+							//pointInterest.y = y;
+							//cv::circle(depth1, pointInterest, 1, cv::Scalar(255 * 256, 255 * 256, 255 * 256));
+						}
+
+						cir_x_last = x;
+						cir_y_last = y;
+						k++;
+					}
+					
+					if (real_coord_x > -600 && real_coord_x<600 && real_coord_y > 1000 && real_coord_y<4000 && real_coord_z>-200 && real_coord_z<-120)//折线
+					{
+						
+					}
+					else
+					{
+					
+					}
+				}
+				else
+				{
+					*far_dpixels = 0;
+				}
+				*far_dpixels++;
+				//height_last = depth;
+			}
+		
+		//根据飞盘边缘坐标的极值计算飞盘中心坐标
+		cir_center_coord_x = (cir_coord_x_max + cir_coord_x_min) / 2;
+		cir_center_coord_y = (cir_coord_y_max + cir_coord_y_min) / 2;
+
+		//计算飞盘长轴及坐标点
+		for (int p = 0; p < (k - 1); p++)
+		{
+			cir_r_square = (cir_point[0][p] - cir_center_coord_x) * (cir_point[0][p] - cir_center_coord_x) + (cir_point[1][p] - cir_center_coord_y) * (cir_point[1][p] - cir_center_coord_y);
+			
+			/*会有飞盘上的点的干扰直接查询飞盘边缘与中心的最短距离不易处理*//*
+		    if ((cir_r_square < cir_r_square_min) && (cir_r_square > 13225))
+			{
+				cir_r_square_min = cir_r_square;
+				cir_coord_x_rmin = cir_point[0][p];
+				cir_coord_y_rmin = cir_point[1][p];
+			}*/
+			if (cir_r_square > cir_r_square_max)
+			{
+				cir_r_square_max = cir_r_square;
+				cir_coord_x_rmax = cir_point[0][p];
+				cir_coord_y_rmax = cir_point[1][p];
+			}
+		}
+
+		//根据长短轴垂直查找飞盘短轴及坐标点
+		for (int q = 0; q < (k - 1); q++)
+		{
+			float k1 = (cir_coord_y_rmax - cir_center_coord_y) / (cir_coord_x_rmax - cir_center_coord_x);
+			float k2 = (cir_point[1][q] - cir_center_coord_y) / (cir_point[0][q] - cir_center_coord_x);
+			float res = abs(k1 * k2 + 1);
+
+			if (res < res_min)
+			{
+				res_min = res;
+				cir_coord_x_rmin = cir_point[0][q];
+				cir_coord_y_rmin = cir_point[1][q];
+			}
+		}
+
+		cir_r_square_min = (cir_coord_x_rmin - cir_center_coord_x) * (cir_coord_x_rmin - cir_center_coord_x) + (cir_coord_y_rmin - cir_center_coord_y) * (cir_coord_y_rmin - cir_center_coord_y);
+		
+		cir_r_min = sqrtf(cir_r_square_min) * 2;
+		cir_r_max = sqrtf(cir_r_square_max) * 2;
+
+		//查询与已知长短轴的坐标点关于飞盘中心对称的飞盘边缘点并计算两边缘点间的距离作为长短轴
+		cir_coord_x_rmin_e = 2 * cir_center_coord_x - cir_coord_x_rmin;
+		cir_coord_y_rmin_e = 2 * cir_center_coord_y - cir_coord_y_rmin;
+		cir_coord_x_rmax_e = 2 * cir_center_coord_x - cir_coord_x_rmax;
+		cir_coord_y_rmax_e = 2 * cir_center_coord_y - cir_coord_y_rmax;
+
+		cir_r_min_e = sqrtf((cir_coord_x_rmin_e - cir_coord_x_rmin) * (cir_coord_x_rmin_e - cir_coord_x_rmin) + (cir_coord_y_rmin_e - cir_coord_y_rmin) * (cir_coord_y_rmin_e - cir_coord_y_rmin));
+		cir_r_max_e = sqrtf((cir_coord_x_rmax_e - cir_coord_x_rmax) * (cir_coord_x_rmax_e - cir_coord_x_rmax) + (cir_coord_y_rmax_e - cir_coord_y_rmax) * (cir_coord_y_rmax_e - cir_coord_y_rmax));
+		
+		//遍历查找圆心的深度值
+	 height = depth1.rows, width = depth1.cols;
+	 far_dpixels = depth1.ptr<ushort>(0);
+
+		cv::Point pointInterest;
+		
+
+		//遍历找到有效狭缝
+		for (int y = 0; y < height; y++)
+			for (int x = 0; x < width; x++)
+			{
+				//区域滤除
+				int predepth = *far_dpixels;
+				float depth = predepth*a;
+
+				float test_center_x = depth * (x - 320.0f) * 0.002108f / cos(theta_x);//68//tan34/320
+				float test_center_y = depth * (240.0f - y) * 0.002123f / cos(theta_y);//54
+
+				if ((abs(test_center_x - cir_center_coord_x) < 0.001f) && (abs(test_center_y - cir_center_coord_y) < 0.001f))
+				{
+					plat_depth = depth * cos(theta_x) * cos(theta_y);
+					thick_plat = ground_depth - plat_depth;
+
+				}
+			}
+
+		//数据输出
+		printf("number = %d\n center_x = %f\t center_y = %f\n max_x = %f\t max_y = %f\n min_x = %f\t min_y = %f\n max_r = %f\t min_r = %f\t thick = %f\n\n",
+			       (k - 1), cir_center_coord_x, cir_center_coord_y, cir_coord_x_rmax, cir_coord_y_rmax, cir_coord_x_rmin, cir_coord_y_rmin, cir_r_max_e, cir_r_min_e, thick_plat);
+		//cout << "number = " << k << endl;
+	 	//cout << "center_x = " << cir_center_coord_x << " " << "center_y = " << cir_center_coord_y << endl; 
+		//cout << "max_x = " << cir_coord_x_rmax << " " << "max_y = " << cir_coord_y_rmax << endl;
+		//cout << "min_x = " << cir_coord_x_rmin << " " << "min_y = " << cir_coord_y_rmin << endl;
+		//cout << "max_r = " << cir_r_max << " " << "min_r = " << cir_r_min << endl;
+
+		//调试程序段//可以注释
+		line(depth1, Point(0, ROI_D_Y1), Point(width, ROI_D_Y1), Scalar(255 * 256, 0, 0), 2, 8);
+		line(depth1, Point(0, ROI_D_Y2), Point(width, ROI_D_Y2), Scalar(255 * 256, 0, 0), 2, 8);
+		line(depth1, Point(ROI_D_X1, 0), Point(ROI_D_X1, height), Scalar(255 * 256, 0, 0), 2, 8);
+		line(depth1, Point(ROI_D_X2, 0), Point(ROI_D_X2, height), Scalar(255 * 256, 0, 0), 2, 8);
+		imshow("River", depth1 * 20);//图像显示必须*20
+
+		/******************************************串口通讯逻辑******************************************/
+		////Flag_GuoHe
+		//data_send_char_buff[0] = Flag_GuoHe;
+		////RobotDepth_Up
+		//data_send_char_buff[1] = (unsigned char)(RobotDepth_Up / 100);
+		//data_send_char_buff[2] = (unsigned char)(RobotDepth_Up - data_send_char_buff[1] * 100);
+		////RobotDepth_River
+		//data_send_char_buff[3] = (unsigned char)(RobotDepth_River / 100);
+		//data_send_char_buff[4] = (unsigned char)(RobotDepth_River - data_send_char_buff[3] * 100);
+		//mySerialPort.WriteData(&baotou1, 1);//发包头 
+		//mySerialPort.WriteData(data_send_char_buff, 5);//发数据,注意需要与数组的长度相匹配
+		//mySerialPort.WriteData(&baowei1, 1);//发包尾1
+		//mySerialPort.WriteData(&baowei2, 1);//发包尾2 
+
+		/********************************************循环尾处理*****************************************/
